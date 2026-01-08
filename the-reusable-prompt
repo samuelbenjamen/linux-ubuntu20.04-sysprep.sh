@@ -1,50 +1,70 @@
-Your Requirements:
-Core Specifications:
+Here is the corrected **Master Prompt**. I have removed the non-standard deletion of documentation and man pages, ensuring the script cleans the disk without stripping essential system reference files.
 
-✅ Environment: Must run as root
-✅ Hostname: Interactive prompt to set hostname + update /etc/hosts
-✅ Package Management:
+---
 
-Display numbered list of manually installed packages (filter out core/kernel)
-Interactive selection via space-separated numbers
-Fully purge snapd + logs
-Run apt-get autoremove --purge and apt-get clean
+### The "Golden Image" Sysprep Prompt (Revised & Standardized)
 
+**Role:** You are an expert Linux System Administrator and Bash Scripter.
 
+**Task:** Write a high-quality, robust, and colored Bash script for Ubuntu (18.04 through 24.04+) to "sysprep" or generalize a VM for cloning (Golden Image creation).
 
-User & Security:
+**Script Structure & UI Requirements:**
 
-✅ User Management (Updated):
-
-Delete all users and their home directories except the root and /home/deploy user, which should not be touched
+1. **Root Check:** Ensure the script runs as root.
+2. **Visuals:** Use color codes (Cyan for headers, Green for success, Red for error, Yellow for warning) and helper functions (`print_info`, `print_header`) for a professional look.
+3. **Two-Phase Flow:** The script must have two distinct phases:
+* **Phase 1 (Configuration):** Ask **ALL** questions upfront (Hostname, Packages, User deletion). Print a summary and ask for final confirmation before making *any* changes.
+* **Phase 2 (Execution):** Run all tasks automatically without further user interruption.
 
 
-✅ Root Directory Safety: Do NOT delete or modify /root or anything in it
 
-Storage & System:
+**Functional Requirements (Phase 1 - Questions):**
 
-✅ Swap: Resize/reset to exactly 1GB (/swap.img) + correct fstab entry
-✅ SSH Keys (Updated): Keep SSH host keys intact (do NOT remove)
-
-Generalization:
-
-✅ Silence Updates: Clear /var/log/unattended-upgrades/ and /var/lib/apt/periodic/
-✅ OS Generalization:
-
-Reset /etc/machine-id
-Remove persistent net rules
+1. **Hostname:** Ask for a new hostname. Validate input (RFC 1123 format).
+2. **Package Selection:**
+* Detect manually installed packages (try using `/var/log/installer/initial-status.gz` first for accuracy, fall back to `apt-mark`).
+* **Filter:** Exclude core system packages (`linux-`, `ubuntu-`, `grub`, `systemd`, etc.) using regex.
+* Display a numbered list and allow the user to select multiple packages to uninstall (space-separated).
 
 
-✅ Clear History: Truncate all /var/log/ files, clear wtmp, btmp, lastlog
+3. **User Deletion:**
+* Identify all human users (UID ≥ 1000).
+* **CRITICAL EXCEPTION:** Do **NOT** delete `root` or the user named `deploy`.
+* Ask the user to confirm deletion of all *other* detected users.
 
-Finalization:
 
-✅ Self-Destruct: Delete script after completion
-✅ Clear Session: Clear current bash_history
-✅ Restart (Updated): Reboot system (NOT shutdown) - for VM reuse after cloning
 
-Platform:
+**Functional Requirements (Phase 2 - Execution):**
 
-✅ Universal Ubuntu (Updated): Works with Ubuntu 18.04, 20.04, 22.04, 24.04+
+1. **Apply Hostname:** Set hostname via `hostnamectl` and update `127.0.1.1` in `/etc/hosts`.
+2. **Package Management:**
+* Purge selected packages.
+* **Aggressive Snap Removal:** Completely purge `snapd`, remove all snaps, stop services, and delete `/snap`, `~/snap`, and `/var/cache/snapd` folders.
+* Run `autoremove`, `autoclean`, and `clean`.
 
-The requirement is now clearer - all users (except root and deploy) will be deleted along with their home directories, while root and deploy remain completely untouched.
+
+3. **User Cleanup:** Kill processes and delete the home directories of the users identified in Phase 1 (except `deploy`).
+4. **Swap Reset:** Turn off swap, delete the file, create a fresh **1GB** file at `/swap.img` using `dd`, and update `/etc/fstab`.
+5. **Disk Cleanup (Standard Practice):**
+* Clear `unattended-upgrades` logs and `/var/lib/apt/periodic` to silence login warnings.
+* Remove old kernels (keep only the current one).
+* Delete Python `__pycache__` folders, `/tmp/*`, crash reports (`/var/crash`), and thumbnail caches.
+* **Constraint:** Do *NOT* delete `/usr/share/doc` or `/usr/share/man`.
+
+
+6. **OS Generalization:**
+* Reset `/etc/machine-id` (truncate and symlink).
+* Remove persistent udev network rules.
+* Clear Cloud-init data and DHCP leases.
+* **Constraint:** Do *not* delete SSH host keys.
+
+
+7. **Logs & History:**
+* Truncate all files in `/var/log`.
+* Clear login records (`wtmp`, `btmp`, `lastlog`).
+* Specific wipe of `.bash_history` for the `deploy` user and `root`.
+
+
+8. **Finalize:**
+* Self-destruct: The script must delete itself.
+* **Action:** REBOOT the system automatically after 5 seconds.
