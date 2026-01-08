@@ -1,0 +1,50 @@
+Your Requirements:
+Core Specifications:
+
+✅ Environment: Must run as root
+✅ Hostname: Interactive prompt to set hostname + update /etc/hosts
+✅ Package Management:
+
+Display numbered list of manually installed packages (filter out core/kernel)
+Interactive selection via space-separated numbers
+Fully purge snapd + logs
+Run apt-get autoremove --purge and apt-get clean
+
+
+
+User & Security:
+
+✅ User Management (Updated):
+
+Delete all users and their home directories except the root and /home/deploy user, which should not be touched
+
+
+✅ Root Directory Safety: Do NOT delete or modify /root or anything in it
+
+Storage & System:
+
+✅ Swap: Resize/reset to exactly 1GB (/swap.img) + correct fstab entry
+✅ SSH Keys (Updated): Keep SSH host keys intact (do NOT remove)
+
+Generalization:
+
+✅ Silence Updates: Clear /var/log/unattended-upgrades/ and /var/lib/apt/periodic/
+✅ OS Generalization:
+
+Reset /etc/machine-id
+Remove persistent net rules
+
+
+✅ Clear History: Truncate all /var/log/ files, clear wtmp, btmp, lastlog
+
+Finalization:
+
+✅ Self-Destruct: Delete script after completion
+✅ Clear Session: Clear current bash_history
+✅ Restart (Updated): Reboot system (NOT shutdown) - for VM reuse after cloning
+
+Platform:
+
+✅ Universal Ubuntu (Updated): Works with Ubuntu 18.04, 20.04, 22.04, 24.04+
+
+The requirement is now clearer - all users (except root and deploy) will be deleted along with their home directories, while root and deploy remain completely untouched.
