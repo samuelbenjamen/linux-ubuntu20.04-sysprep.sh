@@ -1,0 +1,119 @@
+#!/bin/bash
+
+# Ensure script is run as root
+if [ "$EUID" -ne 0 ]; then
+  echo "Please run as root (sudo)."
+  exit 1
+fi
+
+# --- 1. Check and Install growpart ---
+echo "--- Checking dependencies ---"
+if ! command -v growpart &> /dev/null; then
+    echo "'growpart' not found. Installing cloud-guest-utils..."
+    # Detect OS (Debian/Ubuntu vs RHEL/CentOS) for package manager
+    if [ -f /etc/debian_version ]; then
+        apt-get update -qq && apt-get install -y cloud-guest-utils -qq
+    elif [ -f /etc/redhat-release ]; then
+        yum install -y cloud-utils-growpart
+    fi
+else
+    echo "'growpart' is already installed."
+fi
+
+# --- 2. Select Disk ---
+echo -e "\n--- Available Disks ---"
+# Get list of disks (Name and Size)
+mapfile -t DISKS < <(lsblk -d -n -o NAME,SIZE,TYPE | grep disk)
+
+if [ ${#DISKS[@]} -eq 0 ]; then
+    echo "No disks found."
+    exit 1
+fi
+
+# Display numbered options
+for i in "${!DISKS[@]}"; do
+    echo "$((i+1)). ${DISKS[$i]}"
+done
+
+read -p "Select the disk number to resize: " disk_choice
+disk_index=$((disk_choice-1))
+
+if [[ -z "${DISKS[$disk_index]}" ]]; then
+    echo "Invalid selection."
+    exit 1
+fi
+
+# Extract disk name (e.g., sda)
+DISK_NAME=$(echo "${DISKS[$disk_index]}" | awk '{print $1}')
+DISK_PATH="/dev/$DISK_NAME"
+
+# --- 3. Select Partition ---
+echo -e "\n--- Partitions on $DISK_NAME ---"
+lsblk "$DISK_PATH" -o NAME,SIZE,TYPE,FSTYPE
+
+read -p "Enter the PARTITION NUMBER to grow (e.g., enter '3' for ${DISK_NAME}3): " PART_NUM
+
+if [[ -z "$PART_NUM" ]]; then
+    echo "Invalid partition number."
+    exit 1
+fi
+
+PART_PATH="${DISK_PATH}${PART_NUM}"
+
+# --- 4. Grow Partition ---
+echo -e "\n--- Running growpart on $DISK_NAME partition $PART_NUM ---"
+growpart "$DISK_PATH" "$PART_NUM"
+
+# --- 5. Verify with lsblk ---
+echo -e "\n--- Verifying new partition size ---"
+lsblk "$DISK_PATH" -o NAME,SIZE,TYPE
+echo "Check above: Does partition $PART_NUM show the larger size?"
+read -p "Press Enter to continue if correct (Ctrl+C to cancel)..."
+
+# --- 6. Resize PV ---
+echo -e "\n--- Resizing Physical Volume (PV) ---"
+pvresize "$PART_PATH"
+
+# --- 7. Select and Extend LV ---
+# Find Volume Group associated with this partition
+VG_NAME=$(pvs --noheadings -o vg_name "$PART_PATH" | tr -d ' ')
+
+if [[ -z "$VG_NAME" ]]; then
+    echo "No Volume Group found on $PART_PATH. Is it initialized?"
+    exit 1
+fi
+
+echo -e "\n--- Logical Volumes in VG: $VG_NAME ---"
+mapfile -t LVS < <(lvs "$VG_NAME" --noheadings -o lv_path,lv_size,lv_name)
+
+for i in "${!LVS[@]}"; do
+    echo "$((i+1)). ${LVS[$i]}"
+done
+
+read -p "Select the Logical Volume number to extend: " lv_choice
+lv_index=$((lv_choice-1))
+LV_PATH=$(echo "${LVS[$lv_index]}" | awk '{print $1}')
+
+if [[ -z "$LV_PATH" ]]; then
+    echo "Invalid selection."
+    exit 1
+fi
+
+echo -e "\n--- Extending Logical Volume ---"
+lvextend -l +100%FREE "$LV_PATH"
+
+# --- 8. Resize Filesystem ---
+echo -e "\n--- Resizing Filesystem ---"
+# Detect Filesystem Type
+FS_TYPE=$(blkid -o value -s TYPE "$LV_PATH")
+
+if [[ "$FS_TYPE" == "xfs" ]]; then
+    xfs_growfs "$LV_PATH"
+elif [[ "$FS_TYPE" == "ext4" ]]; then
+    resize2fs "$LV_PATH"
+else
+    echo "Unknown filesystem type: $FS_TYPE. Please resize filesystem manually."
+fi
+
+echo -e "\n--- DONE! ---"
+df -h "$LV_PATH"
